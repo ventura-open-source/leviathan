@@ -1,0 +1,6 @@
+{
+    "SOURCE_S3_BUCKET_NAME": "{unique upload bucket name}",
+    "DEST_S3_BUCKET_NAME": "{unique upload bucket name}",
+}
+
+
