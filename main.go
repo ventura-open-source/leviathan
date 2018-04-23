@@ -8,17 +8,14 @@ import (
     "image/jpeg"
     "strings"
     "strconv"
+    "path"
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-lambda-go/lambda"
-    // "github.com/nfnt/resize"
-    //"gopkg.in/h2non/bimg.v1"
+    "github.com/nfnt/resize"
 
-    //"github.com/aws/aws-sdk-go/aws"
+    "github.com/aws/aws-sdk-go/aws"
     //"github.com/aws/aws-sdk-go/aws/awsutil"
     //"github.com/aws/aws-sdk-go/aws/credentials"
-    //"github.com/aws/aws-sdk-go/service/s3"
-    //"github.com/aws/aws-sdk-go/aws/session"
-    "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/s3"
     "github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -47,7 +44,7 @@ var sizes = [17]string {
 
 func Handler(ctx context.Context, s3Event events.S3Event) {
 
-    destBucket := "leviathan-det"
+    destBucket := getEnv("DEST_S3_BUCKET_NAME", "leviathan-det")
     bucket     := s3Event.Records[0].S3.Bucket.Name
     item       := s3Event.Records[0].S3.Object.Key
 
@@ -87,7 +84,7 @@ func Handler(ctx context.Context, s3Event events.S3Event) {
         size := strings.Split(v, "x")
         w, _ := strconv.ParseUint(size[0], 10, 64)
         //h, _ := strconv.ParseUint(size[1], 10, 64)
-        fmt.Println("%d. resizing to %s => %T, %T", i, v, w, img)
+        fmt.Println("%d. resizing to %s => %T", i, v, w)
 
         // resize to especific size using Nearest-neighbor interpolation
         // and preserve aspect ratio
@@ -97,7 +94,9 @@ func Handler(ctx context.Context, s3Event events.S3Event) {
         file := bytes.NewBuffer(buffer);
         jpeg.Encode(file, m, nil)
 
-        filename := item + "resized_" + v + ".jpg"
+
+        _, filename := path.Split(item)
+        filename = "/" + v + "/" + filename
 
         _, err = uploader.Upload(&s3manager.UploadInput{
             Bucket: aws.String(destBucket),
@@ -127,43 +126,6 @@ func Handler(ctx context.Context, s3Event events.S3Event) {
      *svc := s3.New(session.New(), cfg)
      */
 
-
-/*
- *
- *    // open "test.jpg"
- *    file, err := os.Open("test.jpg")
- *    if err != nil {
- *        log.Fatal(err)
- *    }
- *
- *    // decode jpeg into image.Image
- *    img, err := jpeg.Decode(file)
- *    if err != nil {
- *        log.Fatal(err)
- *    }
- *    file.Close()
- *
- *    for i, v := range sizes {
- *        //get the width and height 
- *        size := strings.Split(v, "x")
- *        w, _ := strconv.ParseUint(size[0], 10, 64)
- *        //h, _ := strconv.ParseUint(size[1], 10, 64)
- *        fmt.Printf("%d. resizing to %s \n", i, v)
- *
- *        // resize to especific size using Nearest-neighbor interpolation
- *        // and preserve aspect ratio
- *        m := resize.Resize(uint(w), 0, img, resize.NearestNeighbor)
- *
- *        out, err := os.Create("test_resized_" + v + ".jpg")
- *        if err != nil {
- *            log.Fatal(err)
- *        }
- *        defer out.Close()
- *
- *        // write new image to file
- *        jpeg.Encode(out, m, nil)
- *    }
- */
 }
 
 func main() {
@@ -173,4 +135,11 @@ func main() {
 func exitErrorf(msg string, args ...interface{}) {
     fmt.Fprintf(os.Stderr, msg+"\n", args...)
     os.Exit(1)
+}
+
+func getEnv(key, fallback string) string {
+    if value, ok := os.LookupEnv(key); ok {
+        return value
+    }
+    return fallback
 }

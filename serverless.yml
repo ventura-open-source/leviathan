@@ -30,6 +30,8 @@ functions:
       - s3:
           bucket: ${self:custom.config.SOURCE_S3_BUCKET_NAME}
           event: s3:ObjectCreated:*
+          rules:
+            - prefix: original/
 
 resources:
   Resources:
