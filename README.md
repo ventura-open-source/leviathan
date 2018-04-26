@@ -25,12 +25,12 @@ sls deploy
 
 ### Todo
 
-[ ] - endpoint to upload image to s3
-[x] - - save image to s3
-[ ] - - save metadata (image, user, s3 destination credentials)
-[x] - lambda function to resize image on s3
-[x] - lambda function save results to s3 destination storaged 
-[ ] - control and register user requests (API keys)
+- [ ] endpoint to upload image to s3
+- [x] - save image to s3
+- [ ] - save metadata (image, user, s3 destination credentials)
+- [x] lambda function to resize image on s3
+- [x] lambda function save results to s3 destination storaged 
+- [ ] control and register user requests (API keys)
 
 ### Reports
 >Downloaded **1700700 bytes**
