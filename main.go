@@ -1,17 +1,27 @@
 package main
 
 import (
-    "github.com/nfnt/resize"
-	"image/jpeg"
-	"log"
-	"os"
+    "bytes"
     "fmt"
-	"strings"
-	"strconv"
-    //"gopkg.in/h2non/bimg.v1"
+    "os"
+    "context"
+    "image/jpeg"
+    "strings"
+    "strconv"
+    "path"
+    "github.com/aws/aws-lambda-go/events"
+    "github.com/aws/aws-lambda-go/lambda"
+    "github.com/nfnt/resize"
+
+    "github.com/aws/aws-sdk-go/aws"
+    //"github.com/aws/aws-sdk-go/aws/awsutil"
+    //"github.com/aws/aws-sdk-go/aws/credentials"
+    "github.com/aws/aws-sdk-go/aws/session"
+    "github.com/aws/aws-sdk-go/service/s3"
+    "github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-var sizes = [17]string{
+var sizes = [17]string {
     "2048x1536",
     "640x480",
     "480x360",
@@ -32,38 +42,104 @@ var sizes = [17]string{
     "136x102",
 }
 
-func main() {
-	// open "test.jpg"
-	file, err := os.Open("test.jpg")
-	if err != nil {
-		log.Fatal(err)
-	}
+func Handler(ctx context.Context, s3Event events.S3Event) {
 
-	// decode jpeg into image.Image
-	img, err := jpeg.Decode(file)
-	if err != nil {
-		log.Fatal(err)
-	}
-	file.Close()
+    destBucket := getEnv("DEST_S3_BUCKET_NAME", "leviathan-det")
+    bucket     := s3Event.Records[0].S3.Bucket.Name
+    item       := s3Event.Records[0].S3.Object.Key
+
+    fmt.Println("%s - %s => %s", bucket, item, destBucket)
+
+    sess, err := session.NewSession()
+
+    if err != nil {
+        exitErrorf("Error session %v", err)
+    }
+
+    downloader := s3manager.NewDownloader(sess)
+
+    buff := &aws.WriteAtBuffer{}
+    numBytes, err := downloader.Download(buff,
+        &s3.GetObjectInput{
+            Bucket: aws.String(bucket),
+            Key:    aws.String(item),
+        })
+
+    if err != nil {
+        exitErrorf("Unable to download item %q, %v", item, err)
+    }
+
+    fmt.Println("Downloaded", numBytes, "bytes")
+
+    tmp := bytes.NewReader(buff.Bytes());
+    img, err := jpeg.Decode(tmp)
+    if err != nil {
+        exitErrorf("Unable to decode", err)
+    }
+
+    uploader := s3manager.NewUploader(sess)
 
     for i, v := range sizes {
         //get the width and height 
         size := strings.Split(v, "x")
         w, _ := strconv.ParseUint(size[0], 10, 64)
         //h, _ := strconv.ParseUint(size[1], 10, 64)
-        fmt.Printf("%d. resizing to %s \n", i, v)
+        fmt.Println("%d. resizing to %s => %T", i, v, w)
 
         // resize to especific size using Nearest-neighbor interpolation
         // and preserve aspect ratio
         m := resize.Resize(uint(w), 0, img, resize.NearestNeighbor)
 
-        out, err := os.Create("test_resized_" + v + ".jpg")
-        if err != nil {
-            log.Fatal(err)
-        }
-        defer out.Close()
+        buffer := make([]byte, 0)
+        file := bytes.NewBuffer(buffer);
+        jpeg.Encode(file, m, nil)
 
-        // write new image to file
-        jpeg.Encode(out, m, nil)
+
+        _, filename := path.Split(item)
+        filename = "/" + v + "/" + filename
+
+        _, err = uploader.Upload(&s3manager.UploadInput{
+            Bucket: aws.String(destBucket),
+            Key: aws.String(filename),
+            Body: file,
+        })
+
+        if err != nil {
+            // Print the error and exit.
+            exitErrorf("Unable to upload %q to %q, %v", filename, destBucket, err)
+        }
+
+        fmt.Printf("Successfully uploaded %q to %q\n", filename, destBucket)
     }
+
+
+    /*
+     *aws_access_key_id := "Insert Key ID here"
+     *aws_secret_access_key := "Insert Secret Here"
+     *token := ""
+     *creds := credentials.NewStaticCredentials(aws_access_key_id, aws_secret_access_key, token)
+     *_, err := creds.Get()
+     *if err != nil {
+     *    fmt.Printf("bad credentials: %s", err)
+     *}
+     *cfg := aws.NewConfig().WithRegion("us-west-1").WithCredentials(creds)
+     *svc := s3.New(session.New(), cfg)
+     */
+
+}
+
+func main() {
+    lambda.Start(Handler)
+}
+
+func exitErrorf(msg string, args ...interface{}) {
+    fmt.Fprintf(os.Stderr, msg+"\n", args...)
+    os.Exit(1)
+}
+
+func getEnv(key, fallback string) string {
+    if value, ok := os.LookupEnv(key); ok {
+        return value
+    }
+    return fallback
 }

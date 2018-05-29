@@ -1,0 +1,42 @@
+# Welcome to Serverless!
+
+service: Leviathan
+
+custom:
+  config: ${file(config.json)}
+
+provider:
+  name: aws
+  runtime: go1.x
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - "s3:*"
+      Resource: "*"
+  environment:
+    SOURCE_S3_BUCKET_NAME: ${self:custom.config.SOURCE_S3_BUCKET_NAME}
+    DEST_S3_BUCKET_NAME: ${self:custom.config.DEST_S3_BUCKET_NAME}
+
+package:
+ exclude:
+   - ./**
+ include:
+   - ./bin/**
+
+functions:
+  leviathan:
+    handler: bin/leviathan
+    events:
+      - s3:
+          bucket: ${self:custom.config.SOURCE_S3_BUCKET_NAME}
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: original/
+
+resources:
+  Resources:
+    DestImageBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.config.DEST_S3_BUCKET_NAME}
+
